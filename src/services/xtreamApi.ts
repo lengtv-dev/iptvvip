@@ -180,8 +180,8 @@ export function getProxiedImageUrl(imageUrl?: string): string {
 // Local Storage helpers
 const STORAGE_AUTH_KEY = 'xtream_login_session';
 const STORAGE_RECENT_KEY = 'xtream_watch_history';
-const STORAGE_ADULT_PIN = 'm7_adult_pin';
-const STORAGE_SHOW_ADULT = 'm7_show_adult';
+const STORAGE_ADULT_PIN = 'adult';
+const STORAGE_SHOW_ADULT = 'adult';
 
 export function getSavedAuth(): AuthSession | null {
   try {

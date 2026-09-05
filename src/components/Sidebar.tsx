@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Tv,
   Film,
   Clapperboard,
   History,
+  Heart,
   Trophy,
   Crown,
   Download,
@@ -15,11 +16,12 @@ import {
 } from 'lucide-react';
 import { AuthSession } from '../types';
 import { formatExpDate } from '../services/xtreamApi';
+import { getFavorites } from '../services/favorites';
 
 interface SidebarProps {
   session: AuthSession;
-  activeTab: 'live' | 'vod' | 'series' | 'history';
-  onSelectTab: (tab: 'live' | 'vod' | 'series' | 'history') => void;
+  activeTab: 'live' | 'vod' | 'series' | 'history' | 'favorites';
+  onSelectTab: (tab: 'live' | 'vod' | 'series' | 'history' | 'favorites') => void;
   onOpenSports: () => void;
   onOpenPackages: () => void;
   onDownloadM3U: () => void;
@@ -45,6 +47,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const expFormatted = formatExpDate(userInfo?.exp_date);
   const displayName = session.anyname || session.username;
   const serverHost = session.serverUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+
+  const [favoritesCount, setFavoritesCount] = useState<number>(() => getFavorites().length);
+
+  useEffect(() => {
+    const updateCount = () => {
+      setFavoritesCount(getFavorites().length);
+    };
+    window.addEventListener('playid-favorites-changed', updateCount);
+    window.addEventListener('storage', updateCount);
+    return () => {
+      window.removeEventListener('playid-favorites-changed', updateCount);
+      window.removeEventListener('storage', updateCount);
+    };
+  }, []);
 
   return (
     <aside
@@ -131,6 +147,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <Clapperboard className="w-5 h-5 shrink-0" />
           <span className="font-medium text-sm">ซีรีส์ (Series)</span>
+        </button>
+
+        <button
+          id="navTabFavorites"
+          onClick={() => onSelectTab('favorites')}
+          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-150 ${
+            activeTab === 'favorites'
+              ? 'bg-pink-500/15 text-pink-400 border border-pink-500/30 font-semibold shadow-sm'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+          }`}
+        >
+          <div className="flex items-center space-x-3">
+            <Heart className={`w-5 h-5 shrink-0 ${activeTab === 'favorites' ? 'fill-pink-500 text-pink-500' : 'text-pink-400'}`} />
+            <span className="font-medium text-sm">รายการโปรด</span>
+          </div>
+          {favoritesCount > 0 && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-400 border border-pink-500/30">
+              {favoritesCount}
+            </span>
+          )}
         </button>
 
         <button

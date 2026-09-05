@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
-import { Search, ShieldAlert, Sparkles, ChevronLeft, ChevronRight, Play, Film, Clapperboard, Tv } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Search, ShieldAlert, Sparkles, ChevronLeft, ChevronRight, Play, Film, Clapperboard, Tv, Heart } from 'lucide-react';
 import { Category, LiveStream, SeriesItem, VodStream } from '../types';
 import { getProxiedImageUrl, isAdultContent } from '../services/xtreamApi';
+import { isFavorite, toggleFavorite, determineItemKind } from '../services/favorites';
 
 interface ContentGridProps {
-  type: 'live' | 'vod' | 'series' | 'history';
+  type: 'live' | 'vod' | 'series' | 'history' | 'favorites';
   items: (LiveStream | VodStream | SeriesItem)[];
   categories: Category[];
   selectedCategoryId: string;
@@ -31,6 +32,17 @@ export const ContentGrid: React.FC<ContentGridProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [favVersion, setFavVersion] = useState(0);
+
+  useEffect(() => {
+    const onFavChange = () => setFavVersion((v) => v + 1);
+    window.addEventListener('playid-favorites-changed', onFavChange);
+    window.addEventListener('storage', onFavChange);
+    return () => {
+      window.removeEventListener('playid-favorites-changed', onFavChange);
+      window.removeEventListener('storage', onFavChange);
+    };
+  }, []);
 
   // Filter Categories by adult flag & category search
   const visibleCategories = useMemo(() => {
@@ -177,8 +189,9 @@ export const ContentGrid: React.FC<ContentGridProps> = ({
           {type === 'live' && <Tv className="w-5 h-5 text-indigo-400" />}
           {type === 'vod' && <Film className="w-5 h-5 text-pink-400" />}
           {type === 'series' && <Clapperboard className="w-5 h-5 text-indigo-400" />}
+          {type === 'favorites' && <Heart className="w-5 h-5 text-pink-500 fill-pink-500" />}
           <span>
-            {selectedCategoryName} ({filteredItems.length} {isLive ? 'ช่อง' : 'รายการ'})
+            {type === 'favorites' ? 'รายการโปรดที่บันทึกไว้' : selectedCategoryName} ({filteredItems.length} {isLive ? 'ช่อง' : 'รายการ'})
           </span>
         </h2>
         {totalPages > 1 && (
@@ -195,10 +208,24 @@ export const ContentGrid: React.FC<ContentGridProps> = ({
           <p className="text-sm font-semibold text-slate-400">กำลังโหลดรายการจากเซิร์ฟเวอร์...</p>
         </div>
       ) : filteredItems.length === 0 ? (
-        <div className="py-24 text-center bg-slate-900/40 rounded-2xl border border-white/5">
-          <Sparkles className="w-10 h-10 text-slate-600 mx-auto mb-2" />
-          <p className="text-base font-bold text-slate-300">ไม่พบรายการเนื้อหา</p>
-          <p className="text-xs text-slate-500 mt-1">ลองเปลี่ยนคำค้นหา หรือเลือกหมวดหมู่อื่น</p>
+        <div className="py-24 text-center bg-slate-900/40 rounded-2xl border border-white/5 px-4">
+          {type === 'favorites' ? (
+            <>
+              <div className="w-14 h-14 rounded-full bg-pink-500/10 border border-pink-500/20 flex items-center justify-center mx-auto mb-3 text-pink-400">
+                <Heart className="w-7 h-7 fill-pink-500/30" />
+              </div>
+              <p className="text-base font-bold text-slate-200">ยังไม่มีรายการโปรด</p>
+              <p className="text-xs text-slate-400 mt-1.5 max-w-sm mx-auto leading-relaxed">
+                คลิกที่รายการใดๆ เพื่อเปิดหน้าข้อมูล และกดปุ่ม <span className="text-pink-400 font-semibold">"รายการโปรด"</span> หรือคลิกไอคอนหัวใจบนการ์ด เพื่อบุ๊กมาร์กช่อง หนัง และซีรีส์ที่ชอบ
+              </p>
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-10 h-10 text-slate-600 mx-auto mb-2" />
+              <p className="text-base font-bold text-slate-300">ไม่พบรายการเนื้อหา</p>
+              <p className="text-xs text-slate-500 mt-1">ลองเปลี่ยนคำค้นหา หรือเลือกหมวดหมู่อื่น</p>
+            </>
+          )}
         </div>
       ) : (
         /* Items Grid */
@@ -214,6 +241,8 @@ export const ContentGrid: React.FC<ContentGridProps> = ({
             const icon = item.stream_icon || item.cover || '';
             const proxiedIcon = getProxiedImageUrl(icon);
             const channelNum = String(item.num || item.stream_id || (startIndex + idx + 1)).padStart(3, '0').slice(-3);
+            const itemId = String(item.stream_id || item.series_id || item.id);
+            const isFav = isFavorite(itemId);
             const is4K =
               title.toUpperCase().includes('4K') ||
               title.toUpperCase().includes('2160') ||
@@ -232,6 +261,25 @@ export const ContentGrid: React.FC<ContentGridProps> = ({
                   }`}
                 >
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent opacity-80 pointer-events-none" />
+
+                  {/* Quick Favorite Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const kind = item.kind || determineItemKind(item, type === 'favorites' ? undefined : type);
+                      toggleFavorite(item, kind);
+                      setFavVersion((v) => v + 1);
+                    }}
+                    className={`absolute top-2 right-2 z-20 p-1.5 rounded-full transition-all backdrop-blur-md ${
+                      isFav
+                        ? 'bg-pink-500/90 text-white shadow-md shadow-pink-500/40 opacity-100 scale-105'
+                        : 'bg-black/50 text-slate-300 opacity-0 group-hover:opacity-100 hover:text-white hover:bg-black/75'
+                    }`}
+                    title={isFav ? 'ลบออกจากรายการโปรด' : 'เพิ่มในรายการโปรด'}
+                  >
+                    <Heart className={`w-3.5 h-3.5 ${isFav ? 'fill-current' : ''}`} />
+                  </button>
 
                   {proxiedIcon ? (
                     <img

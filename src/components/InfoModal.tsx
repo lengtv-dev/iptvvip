@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { X, Play, Star, Calendar, Tag, Sparkles } from 'lucide-react';
+import { X, Play, Star, Calendar, Tag, Sparkles, Bookmark, Heart } from 'lucide-react';
 import { AuthSession } from '../types';
 import { fetchSeriesDetail, fetchVodDetail, getProxiedImageUrl } from '../services/xtreamApi';
+import { isFavorite, toggleFavorite, getItemId, determineItemKind } from '../services/favorites';
 
 interface InfoModalProps {
   session: AuthSession;
@@ -20,6 +21,24 @@ export const InfoModal: React.FC<InfoModalProps> = ({ session, item, onClose, on
     cover?: string;
     episodesCount?: number;
   }>({});
+
+  const targetKind = determineItemKind(item);
+  const itemId = getItemId(item);
+  const [favored, setFavored] = useState<boolean>(() => isFavorite(itemId, targetKind));
+
+  const handleToggleFav = () => {
+    const newState = toggleFavorite(
+      {
+        ...item,
+        cover: details.cover || item.cover || item.stream_icon,
+        rating: details.rating || item.rating,
+        year: details.year || item.year,
+        genre: details.genre || item.genre,
+      },
+      targetKind
+    );
+    setFavored(newState);
+  };
 
   const title = item.name || item.title || '-';
   const isSeries = Boolean(item.series_id || item.kind === 'series');
@@ -88,12 +107,27 @@ export const InfoModal: React.FC<InfoModalProps> = ({ session, item, onClose, on
         <button
           onClick={onClose}
           className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors border border-white/5"
+          title="ปิด"
         >
           <X className="w-4 h-4" />
         </button>
 
         {/* Poster Image */}
         <div className="w-full md:w-56 aspect-[2/3] shrink-0 bg-slate-950 relative flex items-center justify-center">
+          {/* Quick Favorite Floating Badge on Poster */}
+          <button
+            onClick={handleToggleFav}
+            id="modalPosterFavBtn"
+            className={`absolute top-3 left-3 z-20 p-2 rounded-full backdrop-blur-md border transition-all ${
+              favored
+                ? 'bg-pink-500/80 text-white border-pink-400/50 shadow-lg shadow-pink-500/30 scale-105'
+                : 'bg-black/60 text-slate-300 hover:text-white hover:bg-black/80 border-white/10'
+            }`}
+            title={favored ? 'ลบออกจากรายการโปรด' : 'เพิ่มในรายการโปรด'}
+          >
+            <Bookmark className={`w-4 h-4 ${favored ? 'fill-current' : ''}`} />
+          </button>
+
           {displayCover ? (
             <img
               src={displayCover}
@@ -162,18 +196,31 @@ export const InfoModal: React.FC<InfoModalProps> = ({ session, item, onClose, on
             )}
           </div>
 
-          {/* Play Button */}
-          <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-3">
+          {/* Action Buttons */}
+          <div className="mt-4 pt-3 border-t border-white/5 flex flex-wrap items-center gap-2 sm:gap-3">
             <button
               onClick={() => onPlay(item)}
-              className="flex-1 py-3 px-5 rounded-full bg-gradient-to-r from-indigo-500 to-pink-600 hover:from-indigo-400 hover:to-pink-500 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/25 active:scale-[0.98]"
+              className="flex-1 min-w-[140px] py-3 px-5 rounded-full bg-gradient-to-r from-indigo-500 to-pink-600 hover:from-indigo-400 hover:to-pink-500 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/25 active:scale-[0.98]"
             >
               <Play className="w-4 h-4 fill-current" />
               <span>▶ เริ่มรับชมเลย</span>
             </button>
             <button
+              id="modalToggleFavoriteBtn"
+              type="button"
+              onClick={handleToggleFav}
+              className={`py-3 px-4 rounded-full text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border shrink-0 ${
+                favored
+                  ? 'bg-pink-500/20 text-pink-400 border-pink-500/40 hover:bg-pink-500/30 shadow-sm'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-white/10 hover:text-white'
+              }`}
+            >
+              <Heart className={`w-4 h-4 ${favored ? 'fill-pink-500 text-pink-500' : 'text-slate-400'}`} />
+              <span>{favored ? 'บันทึกแล้ว' : 'รายการโปรด'}</span>
+            </button>
+            <button
               onClick={onClose}
-              className="py-3 px-5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors border border-white/5"
+              className="py-3 px-4 sm:px-5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors border border-white/5"
             >
               ปิด
             </button>

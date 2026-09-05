@@ -20,6 +20,7 @@ import {
   loginXtream,
   setAdultState,
 } from './services/xtreamApi';
+import { getFavorites } from './services/favorites';
 import { LoginView } from './components/LoginView';
 import { Sidebar } from './components/Sidebar';
 import { HeroSlider } from './components/HeroSlider';
@@ -31,11 +32,11 @@ import { PackagesModal } from './components/PackagesModal';
 import { NavbarMobile } from './components/NavbarMobile';
 import { GlobalSearchInput } from './components/GlobalSearchInput';
 import { GlobalSearchResults } from './components/GlobalSearchResults';
-import { Lock, ShieldAlert, X, Play, Maximize2, Tv, Film, Clapperboard, History } from 'lucide-react';
+import { Lock, ShieldAlert, X, Play, Maximize2, Tv, Film, Clapperboard, History, Heart } from 'lucide-react';
 
 export default function App() {
   const [session, setSession] = useState<AuthSession | null>(null);
-  const [activeTab, setActiveTab] = useState<'live' | 'vod' | 'series' | 'history'>('live');
+  const [activeTab, setActiveTab] = useState<'live' | 'vod' | 'series' | 'history' | 'favorites'>('live');
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [items, setItems] = useState<(LiveStream | VodStream | SeriesItem | WatchHistoryItem)[]>([]);
@@ -145,6 +146,28 @@ export default function App() {
       return;
     }
 
+    if (activeTab === 'favorites') {
+      const favs = getFavorites().map((f) => ({
+        ...f,
+        ...(f.rawItem || {}),
+        name: f.name,
+        stream_icon: f.stream_icon || f.cover,
+        cover: f.cover,
+        kind: f.kind,
+        category_name: f.kind === 'live' ? 'ช่องสด' : f.kind === 'vod' ? 'หนัง VOD' : 'ซีรีส์',
+      }));
+      setItems(favs);
+      setCategories([
+        { category_id: 'all', category_name: 'ทั้งหมด' },
+        { category_id: 'live', category_name: '🔴 ทีวีสด' },
+        { category_id: 'vod', category_name: '🎬 หนัง VOD' },
+        { category_id: 'series', category_name: '📺 ซีรีส์' },
+      ]);
+      setSelectedCategoryId('all');
+      setIsLoading(false);
+      return;
+    }
+
     let isMounted = true;
     setIsLoading(true);
 
@@ -247,10 +270,59 @@ export default function App() {
     };
   }, [globalSearchQuery, session, allLiveCache.length, allVodCache.length, allSeriesCache.length]);
 
+  // Listen for favorite changes to keep favorites tab in sync
+  useEffect(() => {
+    if (activeTab !== 'favorites') return;
+
+    const handleFavChange = () => {
+      const favs = getFavorites().map((f) => ({
+        ...f,
+        ...(f.rawItem || {}),
+        name: f.name,
+        stream_icon: f.stream_icon || f.cover,
+        cover: f.cover,
+        kind: f.kind,
+        category_name: f.kind === 'live' ? 'ช่องสด' : f.kind === 'vod' ? 'หนัง VOD' : 'ซีรีส์',
+      }));
+
+      if (selectedCategoryId === 'all') {
+        setItems(favs);
+      } else {
+        setItems(favs.filter((item) => item.kind === selectedCategoryId));
+      }
+    };
+
+    window.addEventListener('playid-favorites-changed', handleFavChange);
+    window.addEventListener('storage', handleFavChange);
+    return () => {
+      window.removeEventListener('playid-favorites-changed', handleFavChange);
+      window.removeEventListener('storage', handleFavChange);
+    };
+  }, [activeTab, selectedCategoryId]);
+
   // Load specific category items if user clicked a specific category ID (other than 'all')
   const handleSelectCategory = async (catId: string) => {
     setSelectedCategoryId(catId);
     if (!session || activeTab === 'history') return;
+
+    if (activeTab === 'favorites') {
+      const allFavs = getFavorites().map((f) => ({
+        ...f,
+        ...(f.rawItem || {}),
+        name: f.name,
+        stream_icon: f.stream_icon || f.cover,
+        cover: f.cover,
+        kind: f.kind,
+        category_name: f.kind === 'live' ? 'ช่องสด' : f.kind === 'vod' ? 'หนัง VOD' : 'ซีรีส์',
+      }));
+
+      if (catId === 'all') {
+        setItems(allFavs);
+      } else {
+        setItems(allFavs.filter((item) => item.kind === catId));
+      }
+      return;
+    }
 
     if (catId === 'all') {
       setIsLoading(true);
@@ -313,7 +385,7 @@ export default function App() {
   // Start playback from InfoModal
   const handleStartPlayFromInfo = async (item: any) => {
     setInfoModalItem(null);
-    const isSeries = activeTab === 'series' || Boolean(item.series_id);
+    const isSeries = activeTab === 'series' || item.kind === 'series' || Boolean(item.series_id);
 
     if (isSeries && session) {
       const sid = item.series_id || item.id;
@@ -473,6 +545,7 @@ export default function App() {
               {activeTab === 'live' && 'ถ่ายทอดสด (Live TV)'}
               {activeTab === 'vod' && 'ภาพยนตร์ (Movies VOD)'}
               {activeTab === 'series' && 'ซีรีส์ (TV Series)'}
+              {activeTab === 'favorites' && 'รายการโปรด (Favorites)'}
               {activeTab === 'history' && 'ประวัติการรับชม'}
             </span>
           </div>
@@ -525,8 +598,8 @@ export default function App() {
             />
           ) : (
             <>
-              {/* Featured Hero Slider (hidden on history tab) */}
-              {activeTab !== 'history' && (
+              {/* Featured Hero Slider (hidden on history & favorites tabs) */}
+              {activeTab !== 'history' && activeTab !== 'favorites' && (
                 <HeroSlider
                   items={heroFeaturedItems}
                   type={activeTab as 'live' | 'vod' | 'series'}
